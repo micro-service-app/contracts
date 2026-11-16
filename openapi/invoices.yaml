@@ -1,0 +1,373 @@
+openapi: 3.0.3
+info:
+  title: Invoice Service API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8083
+paths:
+  /api/invoices:
+    get:
+      operationId: listInvoices
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/InvoiceStatus"
+        - name: customerId
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: "./common.yaml#/components/parameters/Page"
+        - $ref: "./common.yaml#/components/parameters/Size"
+      responses:
+        "200":
+          description: Paged invoices
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoicePage"
+    post:
+      operationId: createDraftInvoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceInput"
+      responses:
+        "201":
+          description: Draft created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/invoices/{id}:
+    parameters:
+      - $ref: "./common.yaml#/components/parameters/Id"
+    get:
+      operationId: getInvoice
+      responses:
+        "200":
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: updateDraftInvoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceInput"
+      responses:
+        "200":
+          description: Draft updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+
+  /api/invoices/{id}/approve:
+    parameters:
+      - $ref: "./common.yaml#/components/parameters/Id"
+    post:
+      operationId: approveInvoice
+      responses:
+        "200":
+          description: Approved, number assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+
+  /api/invoices/{id}/cancel:
+    parameters:
+      - $ref: "./common.yaml#/components/parameters/Id"
+    post:
+      operationId: cancelInvoice
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+
+  /api/invoices/{id}/send:
+    parameters:
+      - $ref: "./common.yaml#/components/parameters/Id"
+    post:
+      operationId: sendInvoice
+      description: E-mails an approved invoice with its PDF and UBL attached.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to:
+                  type: array
+                  items:
+                    type: string
+                    format: email
+                cc:
+                  type: array
+                  items:
+                    type: string
+                    format: email
+                subject:
+                  type: string
+                  description: Defaults to "<number> numaralı faturanız"
+                message:
+                  type: string
+                templateId:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Sent; the delivery is stored on the invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceDelivery"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+        "502":
+          description: Mail server failed
+
+  /api/invoices/{id}/pdf:
+    parameters:
+      - $ref: "./common.yaml#/components/parameters/Id"
+    get:
+      operationId: getInvoicePdf
+      responses:
+        "200":
+          description: PDF document
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+
+  /health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: Alive
+  /ready:
+    get:
+      operationId: ready
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: Dependencies unavailable
+
+components:
+  schemas:
+    InvoiceStatus:
+      type: string
+      enum: [draft, approved, cancelled]
+
+    InvoiceLineInput:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId:
+          type: string
+        quantity:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        unitPrice:
+          description: Overrides the product price when provided
+          allOf:
+            - $ref: "./common.yaml#/components/schemas/Decimal"
+
+    InvoiceInput:
+      type: object
+      required: [customerId, issueDate, lines]
+      properties:
+        customerId:
+          type: string
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        note:
+          type: string
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/InvoiceLineInput"
+
+    CustomerSnapshot:
+      type: object
+      required: [id, name, taxNumber]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        taxNumber:
+          type: string
+        taxOffice:
+          type: string
+        address:
+          $ref: "./common.yaml#/components/schemas/Address"
+
+    InvoiceLine:
+      type: object
+      required: [productId, sku, name, unit, quantity, unitPrice, vatRate, lineTotal, vatAmount]
+      properties:
+        productId:
+          type: string
+        sku:
+          type: string
+        name:
+          type: string
+        unit:
+          type: string
+        quantity:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        unitPrice:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        vatRate:
+          $ref: "./common.yaml#/components/schemas/VatRate"
+        lineTotal:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        vatAmount:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+
+    Invoice:
+      type: object
+      required: [id, status, issueDate, customer, lines, subtotal, vatTotal, grandTotal, currency, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        number:
+          type: string
+          nullable: true
+          pattern: "^[A-Z]{3}\\d{13}$"
+          example: ERP2026000000001
+        status:
+          $ref: "#/components/schemas/InvoiceStatus"
+        issueDate:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        note:
+          type: string
+        customer:
+          $ref: "#/components/schemas/CustomerSnapshot"
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceLine"
+        subtotal:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        vatTotal:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        grandTotal:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        currency:
+          type: string
+          enum: [TRY]
+        approvedAt:
+          type: string
+          format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+        cancelReason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    InvoiceDelivery:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        to:
+          type: array
+          items:
+            type: string
+        cc:
+          type: array
+          items:
+            type: string
+        subject:
+          type: string
+        templateId:
+          type: string
+          nullable: true
+        templateSource:
+          type: string
+        messageId:
+          type: string
+
+    InvoicePage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invoice"
+        meta:
+          $ref: "./common.yaml#/components/schemas/PageMeta"

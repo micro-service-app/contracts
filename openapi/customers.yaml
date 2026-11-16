@@ -1,0 +1,152 @@
+openapi: 3.0.3
+info:
+  title: Customer Service API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8081
+paths:
+  /api/customers:
+    get:
+      operationId: listCustomers
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Search"
+        - $ref: "./common.yaml#/components/parameters/Page"
+        - $ref: "./common.yaml#/components/parameters/Size"
+      responses:
+        "200":
+          description: Paged customers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerPage"
+    post:
+      operationId: createCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+
+  /api/customers/{id}:
+    parameters:
+      - $ref: "./common.yaml#/components/parameters/Id"
+    get:
+      operationId: getCustomer
+      responses:
+        "200":
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: updateCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    delete:
+      operationId: deleteCustomer
+      responses:
+        "204":
+          description: Soft deleted
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+
+  /health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: Alive
+  /ready:
+    get:
+      operationId: ready
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: Dependencies unavailable
+
+components:
+  schemas:
+    CustomerType:
+      type: string
+      enum: [individual, corporate]
+
+    CustomerInput:
+      type: object
+      required: [type, name, taxNumber]
+      properties:
+        type:
+          $ref: "#/components/schemas/CustomerType"
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+        taxNumber:
+          type: string
+          description: 10 digits (VKN) for corporate, 11 digits (TCKN) for individual
+          pattern: "^\\d{10,11}$"
+        taxOffice:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        address:
+          $ref: "./common.yaml#/components/schemas/Address"
+
+    Customer:
+      allOf:
+        - $ref: "#/components/schemas/CustomerInput"
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    CustomerPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Customer"
+        meta:
+          $ref: "./common.yaml#/components/schemas/PageMeta"

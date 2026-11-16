@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multi-erp.dev/contracts/events.schema.json",
+  "title": "Multi-ERP domain event",
+  "type": "object",
+  "required": ["id", "type", "tenantId", "occurredAt", "source", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "type": "string" },
+    "tenantId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "source": { "type": "string" },
+    "data": { "type": "object" }
+  },
+  "oneOf": [
+    { "properties": { "type": { "const": "customer.created" }, "data": { "$ref": "#/$defs/CustomerRef" } } },
+    { "properties": { "type": { "const": "customer.updated" }, "data": { "$ref": "#/$defs/CustomerRef" } } },
+    { "properties": { "type": { "const": "customer.deleted" }, "data": { "$ref": "#/$defs/IdOnly" } } },
+    { "properties": { "type": { "const": "product.created" }, "data": { "$ref": "#/$defs/ProductRef" } } },
+    { "properties": { "type": { "const": "product.updated" }, "data": { "$ref": "#/$defs/ProductRef" } } },
+    { "properties": { "type": { "const": "product.deleted" }, "data": { "$ref": "#/$defs/IdOnly" } } },
+    { "properties": { "type": { "const": "product.stock-changed" }, "data": { "$ref": "#/$defs/ProductRef" } } },
+    { "properties": { "type": { "const": "invoice.approved" }, "data": { "$ref": "#/$defs/InvoiceRef" } } },
+    { "properties": { "type": { "const": "invoice.cancelled" }, "data": { "$ref": "#/$defs/InvoiceRef" } } }
+  ],
+  "$defs": {
+    "Decimal": { "type": "string", "pattern": "^-?\\d+(\\.\\d{1,4})?$" },
+    "IdOnly": {
+      "type": "object",
+      "required": ["id"],
+      "properties": { "id": { "type": "string" } }
+    },
+    "CustomerRef": {
+      "type": "object",
+      "required": ["id", "name", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "enum": ["individual", "corporate"] }
+      }
+    },
+    "ProductRef": {
+      "type": "object",
+      "required": ["id", "sku", "name", "stock", "criticalStock"],
+      "properties": {
+        "id": { "type": "string" },
+        "sku": { "type": "string" },
+        "name": { "type": "string" },
+        "stock": { "$ref": "#/$defs/Decimal" },
+        "criticalStock": { "$ref": "#/$defs/Decimal" }
+      }
+    },
+    "InvoiceRef": {
+      "type": "object",
+      "required": ["id", "number", "customerId", "customerName", "grandTotal", "lines", "at"],
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "grandTotal": { "$ref": "#/$defs/Decimal" },
+        "at": { "type": "string", "format": "date-time" },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["productId", "quantity"],
+            "properties": {
+              "productId": { "type": "string" },
+              "quantity": { "$ref": "#/$defs/Decimal" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

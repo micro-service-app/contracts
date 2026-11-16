@@ -1,0 +1,147 @@
+openapi: 3.0.3
+info:
+  title: Report Service API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8084
+paths:
+  /api/reports/summary:
+    get:
+      operationId: getSummary
+      responses:
+        "200":
+          description: KPI summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Summary"
+
+  /api/reports/revenue:
+    get:
+      operationId: getRevenue
+      parameters:
+        - name: months
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 24
+            default: 12
+      responses:
+        "200":
+          description: Monthly revenue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RevenuePoint"
+
+  /api/reports/low-stock:
+    get:
+      operationId: getLowStock
+      responses:
+        "200":
+          description: Products at or below critical stock
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LowStockItem"
+
+  /api/reports/resync:
+    post:
+      operationId: resync
+      description: Reloads customers and products from their services into the read model.
+      responses:
+        "200":
+          description: Number of synced records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  customers:
+                    type: integer
+                  products:
+                    type: integer
+
+  /health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: Alive
+  /ready:
+    get:
+      operationId: ready
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: Dependencies unavailable
+
+components:
+  schemas:
+    Summary:
+      type: object
+      required: [customerCount, productCount, invoiceCount, revenueThisMonth, revenueTotal, lowStockCount]
+      properties:
+        customerCount:
+          type: integer
+        productCount:
+          type: integer
+        invoiceCount:
+          type: integer
+        revenueThisMonth:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        revenueTotal:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        lowStockCount:
+          type: integer
+        recentInvoices:
+          type: array
+          items:
+            type: object
+            required: [id, number, customerName, grandTotal, approvedAt]
+            properties:
+              id:
+                type: string
+              number:
+                type: string
+              customerName:
+                type: string
+              grandTotal:
+                $ref: "./common.yaml#/components/schemas/Decimal"
+              approvedAt:
+                type: string
+                format: date-time
+
+    RevenuePoint:
+      type: object
+      required: [month, revenue, invoiceCount]
+      properties:
+        month:
+          type: string
+          pattern: "^\\d{4}-\\d{2}$"
+          example: 2026-11
+        revenue:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        invoiceCount:
+          type: integer
+
+    LowStockItem:
+      type: object
+      required: [productId, sku, name, stock, criticalStock]
+      properties:
+        productId:
+          type: string
+        sku:
+          type: string
+        name:
+          type: string
+        stock:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        criticalStock:
+          $ref: "./common.yaml#/components/schemas/Decimal"

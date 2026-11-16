@@ -1,0 +1,729 @@
+openapi: 3.0.3
+info:
+  title: Document Service API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8085
+paths:
+  /api/documents/render/html:
+    post:
+      operationId: renderHtml
+      description: |
+        Transforms a UBL document with an XSLT. The stylesheet is chosen in this order:
+        `xslt` in the request, `templateId`, the XSLT embedded in the UBL (unless `useEmbedded` is false),
+        the built-in default template. The response header `X-Template-Source` tells which one was used.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderRequest"
+      responses:
+        "200":
+          description: Rendered HTML, served with a sandboxing Content-Security-Policy
+          headers:
+            X-Template-Source:
+              schema:
+                type: string
+                example: template:default
+          content:
+            text/html:
+              schema:
+                type: string
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+
+  /api/documents/render/pdf:
+    post:
+      operationId: renderPdf
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderRequest"
+      responses:
+        "200":
+          description: A4 PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "503":
+          description: PDF engine unavailable
+
+  /api/documents/inspect:
+    post:
+      operationId: inspect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderRequest"
+      responses:
+        "200":
+          description: Summary of the UBL document
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  kind:
+                    type: string
+                    example: Invoice
+                  id:
+                    type: string
+                  uuid:
+                    type: string
+                  profile:
+                    type: string
+                  hasEmbeddedXslt:
+                    type: boolean
+                  embeddedXsltName:
+                    type: string
+                    nullable: true
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/documents/samples/invoice:
+    get:
+      operationId: sampleInvoice
+      responses:
+        "200":
+          description: UBL-TR invoice with fictional data
+          content:
+            application/xml:
+              schema:
+                type: string
+
+  /api/documents/templates/default/xslt:
+    get:
+      operationId: defaultTemplate
+      responses:
+        "200":
+          description: Built-in XSLT 1.0 template
+          content:
+            application/xml:
+              schema:
+                type: string
+
+  /api/documents/email:
+    post:
+      operationId: sendEmail
+      description: Renders the PDF, embeds the template XSLT into the UBL and sends both as attachments.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ubl, to, subject]
+              properties:
+                ubl:
+                  type: string
+                templateId:
+                  type: string
+                xslt:
+                  type: string
+                to:
+                  type: array
+                  maxItems: 10
+                  items:
+                    type: string
+                    format: email
+                cc:
+                  type: array
+                  maxItems: 10
+                  items:
+                    type: string
+                    format: email
+                subject:
+                  type: string
+                  maxLength: 200
+                text:
+                  type: string
+                  maxLength: 5000
+                pdfFileName:
+                  type: string
+                ublFileName:
+                  type: string
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messageId:
+                    type: string
+                  templateSource:
+                    type: string
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "502":
+          description: SMTP server failed
+
+  /api/templates:
+    get:
+      operationId: listTemplates
+      parameters:
+        - name: documentType
+          in: query
+          schema:
+            $ref: "#/components/schemas/DocumentType"
+        - $ref: "./common.yaml#/components/parameters/Search"
+      responses:
+        "200":
+          description: Templates without their XSLT
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TemplateSummary"
+    post:
+      operationId: createTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateDetail"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/templates/designer:
+    get:
+      operationId: designerMeta
+      responses:
+        "200":
+          description: Starter layout, icons, placeholders, field and column lists
+
+  /api/templates/preview:
+    post:
+      operationId: previewLayout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                layout:
+                  type: string
+                  description: Layout JSON; send this or xslt
+                xslt:
+                  type: string
+                  description: Any XSLT template; the HTML preview marks its elements for the designer
+                ubl:
+                  type: string
+                  description: Defaults to the sample invoice
+                format:
+                  type: string
+                  enum: [html, pdf]
+                  default: html
+      responses:
+        "200":
+          description: Rendered preview
+          content:
+            text/html:
+              schema:
+                type: string
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/templates/xslt/inspect:
+    post:
+      operationId: inspectXsltElement
+      description: Describes one literal result element of an XSLT, numbered in document order as in the designer preview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [xslt, target]
+              properties:
+                xslt:
+                  type: string
+                target:
+                  type: integer
+      responses:
+        "200":
+          description: Element details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  target: { type: integer }
+                  tag: { type: string }
+                  text: { type: string, nullable: true, description: Fixed text that can be edited, null when it comes from invoice data }
+                  style: { type: string }
+                  canMove: { type: boolean }
+                  canDelete: { type: boolean }
+                  path: { type: array, items: { type: string } }
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/templates/xslt/edit:
+    post:
+      operationId: editXslt
+      description: Applies visual edits directly to an XSLT and returns the new XSLT, already compiled once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [xslt, operations]
+              properties:
+                xslt:
+                  type: string
+                operations:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    required: [kind, target]
+                    properties:
+                      kind:
+                        type: string
+                        enum: [style, hide, show, text, moveUp, moveDown, delete, insert, insertText, insertImage, tableStyle, columnLeft, columnRight, columnTo, columnDelete, rowTo, tableStripe, paste, duplicate, lock, unlock, group, ungroup, watermark, moveInto, image, replaceColor, pageFont, addRow]
+                      target: { type: integer }
+                      style:
+                        type: object
+                        additionalProperties: { type: string, nullable: true }
+                        description: Allowed CSS properties only; null removes a property
+                      text: { type: string, maxLength: 2000 }
+                      position: { type: string, enum: [before, after, prepend, append, page] }
+                      element: { type: string, enum: [text, heading, image, icon, line, box, field] }
+                      field:
+                        type: string
+                        enum: [number, date, dueDate, ettn, profile, type, sellerName, sellerTaxId, buyerName, buyerTaxId, lineTotal, taxTotal, inclusive, payable]
+                      icon: { type: string }
+                      scope: { type: string, enum: [column, header, body, all] }
+                      to: { type: integer, description: Target column or row index for columnTo and rowTo }
+                      src: { type: string, description: PNG, JPEG, GIF or WebP data URI up to 1 MB }
+                      width: { type: number, description: Image width in mm }
+                      targets:
+                        type: array
+                        items: { type: integer }
+                        description: Further elements for group and moveInto
+                      from: { type: string, description: Color to replace (replaceColor) }
+                      color: { type: string, pattern: "^#[0-9a-fA-F]{6}$", description: New color (replaceColor) }
+                      value: { type: string, maxLength: 2000, description: Free text for the value cell (addRow); field takes an invoice field instead }
+                      mark:
+                        type: object
+                        nullable: true
+                        description: Watermark for the watermark operation; null removes it
+                        properties:
+                          text: { type: string, maxLength: 100, nullable: true }
+                          src: { type: string, nullable: true, description: PNG, JPEG, GIF or WebP data URI up to 1 MB }
+                          size: { type: number, minimum: 8, maximum: 250, description: pt for text, mm for an image }
+                          color: { type: string, pattern: "^#[0-9a-fA-F]{6}$" }
+                          weight: { type: integer, enum: [200, 300, 400, 500, 600, 700, 800] }
+                          opacity: { type: number, minimum: 0.02, maximum: 1 }
+                          rotation: { type: number, minimum: -90, maximum: 90 }
+                          position: { type: string, enum: [center, top, bottom] }
+                          showWhen: { type: string, enum: [always, draft, archive, einvoice] }
+      responses:
+        "200":
+          description: Edited XSLT and the index of the element to keep selected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  xslt: { type: string }
+                  target: { type: integer, nullable: true }
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/templates/check:
+    post:
+      operationId: checkTemplate
+      description: Renders a layout or XSLT with the sample invoice (or the given UBL) and reports which invoice details are visible
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                layout: { type: string }
+                xslt: { type: string }
+                ubl: { type: string }
+                documentType: { type: string, enum: [efatura, earsiv] }
+      responses:
+        "200":
+          description: Checklist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  passed: { type: integer }
+                  required: { type: integer }
+                  requiredPassed: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string }
+                        label: { type: string }
+                        group: { type: string, enum: [required, recommended] }
+                        status: { type: string, enum: [ok, missing, warn, na] }
+                        hint: { type: string }
+                        field: { type: string, nullable: true }
+                        block: { type: string, nullable: true }
+                        find: { type: string, nullable: true }
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/templates/xslt/colors:
+    post:
+      operationId: xsltColors
+      description: Lists the colors an XSLT uses in its styles, attributes and style sheets, most used first
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [xslt]
+              properties:
+                xslt: { type: string }
+      responses:
+        "200":
+          description: Colors as #rrggbb with how often they appear
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    color: { type: string }
+                    count: { type: integer }
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/templates/xslt/copy:
+    post:
+      operationId: copyXslt
+      description: Returns the selected elements as standalone fragments for the paste operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [xslt, targets]
+              properties:
+                xslt: { type: string }
+                targets:
+                  type: array
+                  maxItems: 50
+                  items: { type: integer }
+      responses:
+        "200":
+          description: Fragments in document order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fragments:
+                    type: array
+                    items: { type: string }
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/templates/{id}/convert:
+    post:
+      operationId: convertTemplate
+      description: Creates a separate visual template from an XSLT template; the original is not changed
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201":
+          description: Created visual template and notes on what was carried over
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail: { type: object }
+                  notes: { type: array, items: { type: string } }
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+
+  /api/templates/import:
+    post:
+      operationId: importTemplate
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                name:
+                  type: string
+                documentType:
+                  $ref: "#/components/schemas/DocumentType"
+      responses:
+        "201":
+          description: Imported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateDetail"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+
+  /api/templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getTemplate
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateDetail"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: updateTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateInput"
+      responses:
+        "200":
+          description: Updated, version incremented
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateDetail"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+    delete:
+      operationId: deleteTemplate
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+
+  /api/templates/{id}/default:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: setDefaultTemplate
+      responses:
+        "200":
+          description: Now the default of its document type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateSummary"
+
+  /api/templates/{id}/copy:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: copyTemplate
+      responses:
+        "201":
+          description: Copy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateDetail"
+
+  /api/templates/{id}/versions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: listTemplateVersions
+      responses:
+        "200":
+          description: Newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    version:
+                      type: integer
+                    name:
+                      type: string
+                    createdAt:
+                      type: string
+                      format: date-time
+
+  /api/templates/{id}/versions/{version}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+    post:
+      operationId: restoreTemplateVersion
+      responses:
+        "200":
+          description: Restored as a new version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateDetail"
+
+components:
+  schemas:
+    DocumentType:
+      type: string
+      enum: [efatura, earsiv, general]
+
+    TemplateInput:
+      type: object
+      required: [name, documentType]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        documentType:
+          $ref: "#/components/schemas/DocumentType"
+        xslt:
+          type: string
+        layout:
+          type: string
+          nullable: true
+          description: Layout JSON from the visual designer; when present the XSLT is generated from it
+        version:
+          type: integer
+          description: Required on update; the version that was edited
+
+    TemplateSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        documentType:
+          $ref: "#/components/schemas/DocumentType"
+        kind:
+          type: string
+          enum: [xslt, visual]
+        source:
+          type: string
+          enum: [builtin, import, copy, manual]
+        isDefault:
+          type: boolean
+        builtIn:
+          type: boolean
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TemplateDetail:
+      type: object
+      properties:
+        template:
+          $ref: "#/components/schemas/TemplateSummary"
+        xslt:
+          type: string
+        layout:
+          type: string
+          nullable: true
+
+    RenderRequest:
+      type: object
+      properties:
+        ubl:
+          type: string
+          description: UBL XML. When empty, the built-in sample invoice is used.
+        xslt:
+          type: string
+          description: XSLT 1.0 stylesheet
+        templateId:
+          type: string
+          example: default
+        useEmbedded:
+          type: boolean
+          default: true

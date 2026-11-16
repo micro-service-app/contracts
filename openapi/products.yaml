@@ -1,0 +1,152 @@
+openapi: 3.0.3
+info:
+  title: Product Service API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8082
+paths:
+  /api/products:
+    get:
+      operationId: listProducts
+      parameters:
+        - $ref: "./common.yaml#/components/parameters/Search"
+        - $ref: "./common.yaml#/components/parameters/Page"
+        - $ref: "./common.yaml#/components/parameters/Size"
+      responses:
+        "200":
+          description: Paged products
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductPage"
+    post:
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+
+  /api/products/{id}:
+    parameters:
+      - $ref: "./common.yaml#/components/parameters/Id"
+    get:
+      operationId: getProduct
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+    put:
+      operationId: updateProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "./common.yaml#/components/responses/BadRequest"
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+        "409":
+          $ref: "./common.yaml#/components/responses/Conflict"
+    delete:
+      operationId: deleteProduct
+      responses:
+        "204":
+          description: Soft deleted
+        "404":
+          $ref: "./common.yaml#/components/responses/NotFound"
+
+  /health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: Alive
+  /ready:
+    get:
+      operationId: ready
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: Dependencies unavailable
+
+components:
+  schemas:
+    Unit:
+      type: string
+      enum: [piece, kg, lt, m, hour]
+
+    ProductInput:
+      type: object
+      required: [sku, name, unit, unitPrice, vatRate]
+      properties:
+        sku:
+          type: string
+          pattern: "^[A-Z0-9-]{3,32}$"
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+        unit:
+          $ref: "#/components/schemas/Unit"
+        unitPrice:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        vatRate:
+          $ref: "./common.yaml#/components/schemas/VatRate"
+        stock:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+        criticalStock:
+          $ref: "./common.yaml#/components/schemas/Decimal"
+
+    Product:
+      allOf:
+        - $ref: "#/components/schemas/ProductInput"
+        - type: object
+          required: [id, stock, criticalStock, createdAt, updatedAt]
+          properties:
+            id:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    ProductPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+        meta:
+          $ref: "./common.yaml#/components/schemas/PageMeta"
